@@ -1,0 +1,51 @@
+name: Build APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preparar el proyecto (descomprime el zip si hace falta)
+        id: p
+        run: |
+          if [ -z "$(find . -name settings.gradle.kts | head -n 1)" ]; then
+            z=$(find . -maxdepth 1 -name '*.zip' | head -n 1)
+            if [ -z "$z" ]; then
+              echo "No hay settings.gradle.kts ni un .zip en el repo. Archivos que hay:"
+              find . -path ./.git -prune -o -type f -print | head -n 60
+              exit 1
+            fi
+            echo "Descomprimiendo $z"
+            mkdir -p proyecto
+            unzip -q "$z" -d proyecto
+          fi
+          f=$(find . -name settings.gradle.kts | head -n 1)
+          if [ -z "$f" ]; then
+            echo "El zip no tiene settings.gradle.kts. Contenido:"
+            find proyecto -type f | head -n 60
+            exit 1
+          fi
+          echo "Proyecto en: $(dirname "$f")"
+          echo "dir=$(dirname "$f")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+
+      - name: Compilar
+        working-directory: ${{ steps.p.outputs.dir }}
+        run: gradle assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MiTienda-apk
+          path: "**/build/outputs/apk/debug/app-debug.apk"
